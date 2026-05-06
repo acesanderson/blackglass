@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib
 import subprocess
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from ..auth import require_api_key
 from ..config import settings
 from ..vault import list_files
@@ -19,6 +19,9 @@ async def sync_vault() -> dict:
         capture_output=True,
         text=True,
     )
+
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr.strip())
 
     files = list_files(settings.vault_path)
     indexed = await get_indexed_hashes()
