@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "blackglass-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "httpx",
+    "asyncpg",
+    "pgvector",
+    "pyyaml",
+    "dbclients",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.uv.sources]
+dbclients = { path = "/Users/bianders/Brian_Code/dbclients-project", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blackglass_server"]

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "blackglass-client"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "click",
+    "httpx",
+]
+
+[project.scripts]
+blackglass = "blackglass_client.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blackglass_client"]
