@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from ..auth import require_api_key
 from ..config import settings
-from ..vault import read_note, write_note, delete_note
+from ..vault import read_note, write_note, delete_note, _resolve
 from ..text_utils import split_frontmatter
 
 router = APIRouter(prefix="/vault/notes", dependencies=[Depends(require_api_key)])
@@ -33,7 +33,10 @@ def get_note(path: str) -> dict:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_note(path: str, body: NoteCreate) -> dict:
-    full = settings.vault_path / path
+    try:
+        full = _resolve(settings.vault_path, path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid path: {path}")
     if full.exists():
         raise HTTPException(status_code=409, detail=f"Note already exists: {path}")
     write_note(settings.vault_path, path, body.content)

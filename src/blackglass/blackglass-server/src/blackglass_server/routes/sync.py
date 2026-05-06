@@ -41,6 +41,7 @@ async def sync_vault() -> dict:
         paths = [b[0] for b in batch]
         texts = [b[1] for b in batch]
         hashes = [b[2] for b in batch]
+        # Backwater returns embeddings in the same order as the input documents
         embeddings = await embed_batch(texts, paths)
         for path, h, emb in zip(paths, hashes, embeddings):
             await upsert_embedding(path, h, emb)
