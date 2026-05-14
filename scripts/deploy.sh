@@ -18,7 +18,6 @@ ssh -p 2222 "$REMOTE" bash <<EOF
 set -euo pipefail
 cd $REMOTE_DIR
 git pull --ff-only
-cd $SERVER_SUBDIR
 uv sync
 echo "Deploy complete."
 EOF
