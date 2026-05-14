@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-dbclients = { path = "/Users/bianders/Brian_Code/dbclients-project", editable = true }
+dbclients = { path = "../../dbclients-project", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/blackglass_server"]

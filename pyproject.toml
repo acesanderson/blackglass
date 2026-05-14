@@ -1,6 +1,5 @@
 [tool.uv.workspace]
 members = ["src/blackglass/blackglass-server", "src/blackglass/blackglass-client"]
 
-# Local dev override — un-comment on MacBook if you need editable dbclients:
-[tool.uv.sources]
-dbclients = { path = "../dbclients-project", editable = true }
+# [tool.uv.sources]
+# dbclients = { path = "../dbclients-project", editable = true }
