@@ -1,5 +1,0 @@
-[tool.uv.workspace]
-members = ["src/blackglass/blackglass-server", "src/blackglass/blackglass-client"]
-
-# [tool.uv.sources]
-# dbclients = { path = "../dbclients-project", editable = true }
