@@ -4,6 +4,11 @@ from pathlib import Path
 from .text_utils import split_frontmatter, extract_wikilinks, extract_tags
 
 _PERIODIC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
+_SKIP_DIRS = {".obsidian", ".trash"}
+
+
+def _skip(p: Path) -> bool:
+    return bool(_SKIP_DIRS & set(p.parts))
 
 
 def _resolve(vault_path: Path, rel_path: str) -> Path:
@@ -46,7 +51,7 @@ def delete_note(vault_path: Path, rel_path: str) -> None:
 def list_files(vault_path: Path) -> list[dict]:
     results = []
     for p in sorted(vault_path.rglob("*.md")):
-        if ".obsidian" in p.parts:
+        if _skip(p):
             continue
         rel = str(p.relative_to(vault_path))
         results.append({"path": rel, "size": p.stat().st_size})
@@ -57,7 +62,7 @@ def compute_backlinks(vault_path: Path, rel_path: str) -> list[str]:
     stem = Path(rel_path).stem
     backlinks = []
     for p in vault_path.rglob("*.md"):
-        if ".obsidian" in p.parts:
+        if _skip(p):
             continue
         text = p.read_text(encoding="utf-8", errors="ignore")
         if f"[[{stem}]]" in text or f"[[{stem}|" in text:
@@ -68,7 +73,7 @@ def compute_backlinks(vault_path: Path, rel_path: str) -> list[str]:
 def list_tags(vault_path: Path) -> list[dict]:
     counts: dict[str, int] = {}
     for p in vault_path.rglob("*.md"):
-        if ".obsidian" in p.parts:
+        if _skip(p):
             continue
         text = p.read_text(encoding="utf-8", errors="ignore")
         fm, _ = split_frontmatter(text)
@@ -89,7 +94,7 @@ def fulltext_search(vault_path: Path, query: str) -> list[dict]:
     query_lower = query.lower()
     results = []
     for p in vault_path.rglob("*.md"):
-        if ".obsidian" in p.parts:
+        if _skip(p):
             continue
         text = p.read_text(encoding="utf-8", errors="ignore")
         if query_lower in text.lower():
