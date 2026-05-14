@@ -1,17 +1,6 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [tool.uv.workspace]
-members = ["blackglass-server", "blackglass-client"]
+members = ["src/blackglass/blackglass-server", "src/blackglass/blackglass-client"]
 
-[project]
-name = "blackglass"
-version = "0.1.0"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/blackglass"]
-sources = ["src"]
-
-[tool.hatch.build.targets.sdist]
-include = ["src/blackglass/py.typed"]
+# Local dev override — un-comment on MacBook if you need editable dbclients:
+# [tool.uv.sources]
+# dbclients = { path = "/Users/bianders/Brian_Code/dbclients-project", editable = true }
