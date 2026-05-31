@@ -436,7 +436,7 @@ In every case, the LLM did the markdown reasoning on content it already had in c
 |---|---|
 | `old` empty | 400 `{"detail": "old must be non-empty"}` |
 | `old` not found | 404 `{"detail": "old not found in file"}` |
-| `old` matches > 1, `replace_all=false` | 409 `{"detail": "old matched N times; set replace_all=true or widen anchor", "match_count": N}` |
+| `old` matches > 1, `replace_all=false` | 409 `{"detail": {"message": "old matched multiple times; set replace_all=true or widen anchor", "match_count": N}}` |
 | `old` not found AND `replace_all=true` | 404 (explicit, not silent no-op) |
 | File not found | 404 (path-level) |
 | File is a directory | 400 |
@@ -448,7 +448,7 @@ In every case, the LLM did the markdown reasoning on content it already had in c
 ### Response
 Same shape as existing PATCH success: full updated note. Adds:
 - `replacements: <int>` — 1 for unique-replace, N for replace_all.
-- `match_count: <int>` — only on 409.
+- On 409: `{"detail": {"message": "...", "match_count": N}}`.
 
 ### Acceptance criteria
 1. Fixture file `tests/fixtures/replace/simple.md` with body `"alpha beta gamma"`. PATCH `op=replace, old="beta", new="DELTA"` → response `replacements: 1`, file on disk reads `"alpha DELTA gamma"`.

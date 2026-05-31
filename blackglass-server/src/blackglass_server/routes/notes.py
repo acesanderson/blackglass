@@ -21,9 +21,14 @@ class NotePatch(BaseModel):
     content: str | None = None
     key: str | None = None
     value: str | None = None
+    old: str | None = None
+    new: str | None = None
+    replace_all: bool = False
 
 
 _MAX_BATCH_SIZE = 50
+_MAX_ANCHOR_BYTES = 1024 * 1024        # 1 MiB
+_MAX_FILE_BYTES = 10 * 1024 * 1024     # 10 MiB
 
 
 class BatchReadIn(BaseModel):
@@ -99,8 +104,7 @@ def replace_note(path: str, body: NoteCreate) -> dict:
     return read_note(settings.vault_path, path)
 
 
-@router.patch("/{path:path}")
-def patch_note(path: str, body: NotePatch) -> dict:
+def _apply_patch(path: str, body: NotePatch) -> dict:
     try:
         note = read_note(settings.vault_path, path)
     except FileNotFoundError:
@@ -118,11 +122,40 @@ def patch_note(path: str, body: NotePatch) -> dict:
         fm, b = split_frontmatter(note["content"])
         fm[body.key] = body.value
         new_content = "---\n" + yaml.dump(fm, default_flow_style=False) + "---\n" + b
+    elif body.op == "replace":
+        old = body.old if body.old is not None else ""
+        new = body.new if body.new is not None else ""
+        replace_all = body.replace_all
+        if old == "":
+            raise HTTPException(status_code=400, detail="old must be non-empty")
+        if len(old) > _MAX_ANCHOR_BYTES or len(new) > _MAX_ANCHOR_BYTES:
+            raise HTTPException(status_code=413, detail="old/new exceeds 1 MiB")
+        current = note["content"]
+        count = current.count(old)
+        if count == 0:
+            raise HTTPException(status_code=404, detail="old not found in file")
+        if count > 1 and not replace_all:
+            raise HTTPException(status_code=409, detail={
+                "message": "old matched multiple times; set replace_all=true or widen anchor",
+                "match_count": count,
+            })
+        updated = current.replace(old, new) if replace_all else current.replace(old, new, 1)
+        if len(updated.encode("utf-8")) > _MAX_FILE_BYTES:
+            raise HTTPException(status_code=413, detail="file would exceed 10 MiB")
+        write_note(settings.vault_path, path, updated)
+        result = read_note(settings.vault_path, path)
+        result["replacements"] = count if replace_all else 1
+        return result
     else:
         raise HTTPException(status_code=422, detail=f"Unknown op: {body.op}")
 
     write_note(settings.vault_path, path, new_content)
     return read_note(settings.vault_path, path)
+
+
+@router.patch("/{path:path}")
+def patch_note(path: str, body: NotePatch) -> dict:
+    return _apply_patch(path, body)
 
 
 @router.delete("/{path:path}", status_code=status.HTTP_204_NO_CONTENT)

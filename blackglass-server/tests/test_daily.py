@@ -49,3 +49,17 @@ def test_append_creates_then_appends(client, vault):
     r2 = client.post("/vault/periodic/today/append", json={"content": "two\n"})
     assert r2.status_code == 200
     assert target.read_text() == "one\ntwo\n"
+
+
+def test_patch_today_replace(client, vault):
+    today = _today_in_tz("UTC")
+    target = vault / f"{today}.md"
+    if target.exists():
+        target.unlink()
+    # First create + populate via append
+    client.post("/vault/periodic/today/append", json={"content": "old line\n"})
+    r = client.patch("/vault/periodic/today", json={
+        "op": "replace", "old": "old line", "new": "new line"
+    })
+    assert r.status_code == 200
+    assert target.read_text() == "new line\n"

@@ -19,6 +19,7 @@ from ..vault import (
     read_note,
     note_meta,
 )
+from .notes import NotePatch, _apply_patch
 
 router = APIRouter(prefix="/vault", dependencies=[Depends(require_api_key)])
 
@@ -107,6 +108,13 @@ def periodic_today_append(content: str = Body(..., embed=True)) -> dict:
     with p.open("a", encoding="utf-8") as f:
         f.write(content)
     return read_note(settings.vault_path, f"{date_str}.md")
+
+
+@router.patch("/periodic/today")
+def periodic_today_patch(body: NotePatch) -> dict:
+    date_str = today_in_tz(settings.tz)
+    ensure_daily_note(settings.vault_path, date_str)
+    return _apply_patch(f"{date_str}.md", body)
 
 
 _SKIP_DIRS = ("/.obsidian/", "/.trash/")
