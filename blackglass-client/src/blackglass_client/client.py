@@ -11,8 +11,10 @@ def _client() -> httpx.Client:
     return httpx.Client(base_url=url, headers={"X-API-Key": key}, timeout=60.0)
 
 
-def request(method: str, path: str, **kwargs) -> dict | list:
+def request(method: str, path: str, **kwargs) -> dict | list | None:
     with _client() as c:
         resp = c.request(method, path, **kwargs)
         resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return None
         return resp.json()
