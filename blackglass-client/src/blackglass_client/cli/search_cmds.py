@@ -1,19 +1,7 @@
 from __future__ import annotations
-import json
 import click
 from ..client import request
-
-
-def _out(data: list, as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(data, indent=2))
-    else:
-        for item in data:
-            click.echo(f"  {item['path']}")
-            if "excerpt" in item:
-                click.echo(f"    {item['excerpt'][:120]}")
-            if "score" in item:
-                click.echo(f"    score: {item['score']:.3f}")
+from ._output import _emit
 
 
 @click.group()
@@ -23,18 +11,52 @@ def search():
 
 @search.command("text")
 @click.argument("query")
-@click.option("--json", "as_json", is_flag=True)
-def text_search(query: str, as_json: bool) -> None:
+@click.option("--snippet-chars", type=int, help="Snippet length per hit (0..1000, default 300).")
+@click.pass_context
+def text_search(ctx: click.Context, query: str, snippet_chars: int | None) -> None:
     """Full-text search across all notes."""
-    results = request("GET", "/vault/search", params={"q": query})
-    _out(results, as_json)
+    params: dict[str, str] = {"q": query}
+    if snippet_chars is not None:
+        params["snippet_chars"] = str(snippet_chars)
+    _emit(request("GET", "/vault/search", params=params), ctx.obj["pretty"])
 
 
 @search.command("semantic")
 @click.argument("query")
-@click.option("--limit", default=10, show_default=True)
-@click.option("--json", "as_json", is_flag=True)
-def semantic_search(query: str, limit: int, as_json: bool) -> None:
+@click.option("--limit", type=int, help="Result cap (1..100, default 10).")
+@click.option("--snippet-chars", type=int, help="Snippet length per hit (0..1000, default 300).")
+@click.pass_context
+def semantic_search(
+    ctx: click.Context, query: str, limit: int | None, snippet_chars: int | None
+) -> None:
     """Semantic (embedding) search across indexed notes."""
-    results = request("GET", "/vault/semantic-search", params={"q": query, "limit": limit})
-    _out(results, as_json)
+    params: dict[str, str] = {"q": query}
+    if limit is not None:
+        params["limit"] = str(limit)
+    if snippet_chars is not None:
+        params["snippet_chars"] = str(snippet_chars)
+    _emit(request("GET", "/vault/semantic-search", params=params), ctx.obj["pretty"])
+
+
+@search.command("hybrid")
+@click.argument("query")
+@click.option("--limit", type=int, help="Result cap (1..100, default 10).")
+@click.option("--snippet-chars", type=int, help="Snippet length per hit (0..1000, default 300).")
+@click.option("--k", type=int, help="RRF k constant (1..1000, default 60).")
+@click.pass_context
+def hybrid_search(
+    ctx: click.Context,
+    query: str,
+    limit: int | None,
+    snippet_chars: int | None,
+    k: int | None,
+) -> None:
+    """Hybrid (text + semantic) search with reciprocal rank fusion."""
+    params: dict[str, str] = {"q": query}
+    if limit is not None:
+        params["limit"] = str(limit)
+    if snippet_chars is not None:
+        params["snippet_chars"] = str(snippet_chars)
+    if k is not None:
+        params["k"] = str(k)
+    _emit(request("GET", "/vault/hybrid-search", params=params), ctx.obj["pretty"])
