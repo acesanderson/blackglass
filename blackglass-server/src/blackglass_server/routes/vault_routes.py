@@ -1,8 +1,12 @@
 from __future__ import annotations
+import datetime
+import subprocess
+import time as _time
 from pathlib import PurePosixPath
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from ..auth import require_api_key
 from ..config import settings
+from ..git_utils import git_changes
 from ..vault import (
     list_files,
     list_files_filtered,
@@ -103,3 +107,73 @@ def periodic_today_append(content: str = Body(..., embed=True)) -> dict:
     with p.open("a", encoding="utf-8") as f:
         f.write(content)
     return read_note(settings.vault_path, f"{date_str}.md")
+
+
+_SKIP_DIRS = ("/.obsidian/", "/.trash/")
+
+
+def _parse_since(since: str) -> float:
+    try:
+        return float(since)
+    except ValueError:
+        pass
+    s = since.replace("Z", "+00:00")
+    try:
+        return datetime.datetime.fromisoformat(s).timestamp()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"unparseable since: {since}") from exc
+
+
+@router.get("/changes")
+def vault_changes(
+    since: str | None = None,
+    days: int | None = None,
+    limit: int = Query(default=200, ge=1, le=2000),
+    include_diff_stats: bool = False,
+) -> dict:
+    if since is not None and days is not None:
+        raise HTTPException(status_code=400, detail="pass either since or days, not both")
+    if days is not None and (days < 1 or days > 365):
+        raise HTTPException(status_code=400, detail="days must be in [1, 365]")
+    if since is None and days is None:
+        days = 7
+    if days is not None:
+        since_epoch = _time.time() - days * 86400
+    else:
+        since_epoch = _parse_since(since)
+
+    if not (settings.vault_path / ".git").exists():
+        raise HTTPException(status_code=400, detail="vault is not a git repository")
+
+    try:
+        commits = git_changes(settings.vault_path, since_epoch, include_diff_stats)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="git not available on server")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="git log timed out")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    flat: list[dict] = []
+    for c in commits:
+        for ch in c["changes"]:
+            normalized = "/" + ch["path"]
+            if any(s in normalized for s in _SKIP_DIRS):
+                continue
+            flat.append({
+                "path": ch["path"],
+                "change": ch["change"],
+                "commit": c["commit"][:7],
+                "timestamp": c["timestamp"],
+                "subject": c["subject"],
+                "from_path": ch["from_path"],
+                "diff_stats": ch.get("diff_stats"),
+            })
+    flat.sort(key=lambda x: x["timestamp"], reverse=True)
+    truncated = len(flat) > limit
+    return {
+        "since": since_epoch,
+        "limit": limit,
+        "changes": flat[:limit],
+        "truncated": truncated,
+    }
