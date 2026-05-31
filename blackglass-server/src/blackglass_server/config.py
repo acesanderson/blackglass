@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     api_key: str
     port: int = 8083
     backwater_url: str = "http://localhost:8080"
+    tz: str = "UTC"
 
     model_config = {"env_prefix": "BLACKGLASS_"}
 

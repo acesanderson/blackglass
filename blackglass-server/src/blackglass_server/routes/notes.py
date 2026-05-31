@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from ..auth import require_api_key
 from ..config import settings
-from ..vault import read_note, write_note, delete_note, _resolve
+from ..vault import read_note, write_note, delete_note, note_meta, _resolve
 from ..text_utils import split_frontmatter
 
 router = APIRouter(prefix="/vault/notes", dependencies=[Depends(require_api_key)])
@@ -21,6 +21,61 @@ class NotePatch(BaseModel):
     content: str | None = None
     key: str | None = None
     value: str | None = None
+    old: str | None = None
+    new: str | None = None
+    replace_all: bool = False
+
+
+_MAX_BATCH_SIZE = 50
+_MAX_ANCHOR_BYTES = 1024 * 1024        # 1 MiB
+_MAX_FILE_BYTES = 10 * 1024 * 1024     # 10 MiB
+
+
+class BatchReadIn(BaseModel):
+    paths: list[str]
+
+
+# Registered BEFORE the catch-all GET /{path:path}; FastAPI's first-match resolution
+# routes /vault/notes/<rel>/meta here and /vault/notes/batch here.
+# Reordering these decorators silently breaks meta/batch.
+@router.post("/batch", status_code=status.HTTP_200_OK)
+def batch_read(payload: BatchReadIn) -> dict:
+    paths = payload.paths
+    # Validation 400s (rather than Pydantic's 422) per spec §2: agent-facing batch
+    # endpoint uses a single status family for all body shape rejections.
+    if not paths:
+        raise HTTPException(status_code=400, detail="paths must be non-empty")
+    if len(paths) > _MAX_BATCH_SIZE:
+        raise HTTPException(status_code=400, detail=f"max {_MAX_BATCH_SIZE} paths per batch")
+    results = []
+    summary: dict[str, int] = {"ok": 0, "not_found": 0, "error": 0}
+    for p in paths:
+        # FileNotFoundError is a subclass of OSError; catch it before the OSError fallback.
+        # ValueError comes from _resolve on path-escape; not an OSError, ordering is incidental.
+        try:
+            note = read_note(settings.vault_path, p)
+            results.append({"path": p, "status": "ok", "note": note})
+            summary["ok"] += 1
+        except FileNotFoundError:
+            results.append({"path": p, "status": "not_found", "error": "not found"})
+            summary["not_found"] += 1
+        except ValueError:
+            results.append({"path": p, "status": "error", "error": "path escapes vault"})
+            summary["error"] += 1
+        except OSError as exc:
+            results.append({"path": p, "status": "error", "error": type(exc).__name__})
+            summary["error"] += 1
+    return {"results": results, "summary": summary}
+
+
+@router.get("/{path:path}/meta")
+def get_meta(path: str) -> dict:
+    try:
+        return note_meta(settings.vault_path, path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="path escapes vault")
+    except IsADirectoryError:
+        raise HTTPException(status_code=400, detail="path is a directory")
 
 
 @router.get("/{path:path}")
@@ -49,8 +104,7 @@ def replace_note(path: str, body: NoteCreate) -> dict:
     return read_note(settings.vault_path, path)
 
 
-@router.patch("/{path:path}")
-def patch_note(path: str, body: NotePatch) -> dict:
+def _apply_patch(path: str, body: NotePatch) -> dict:
     try:
         note = read_note(settings.vault_path, path)
     except FileNotFoundError:
@@ -68,11 +122,40 @@ def patch_note(path: str, body: NotePatch) -> dict:
         fm, b = split_frontmatter(note["content"])
         fm[body.key] = body.value
         new_content = "---\n" + yaml.dump(fm, default_flow_style=False) + "---\n" + b
+    elif body.op == "replace":
+        old = body.old if body.old is not None else ""
+        new = body.new if body.new is not None else ""
+        replace_all = body.replace_all
+        if old == "":
+            raise HTTPException(status_code=400, detail="old must be non-empty")
+        if len(old) > _MAX_ANCHOR_BYTES or len(new) > _MAX_ANCHOR_BYTES:
+            raise HTTPException(status_code=413, detail="old/new exceeds 1 MiB")
+        current = note["content"]
+        count = current.count(old)
+        if count == 0:
+            raise HTTPException(status_code=404, detail="old not found in file")
+        if count > 1 and not replace_all:
+            raise HTTPException(status_code=409, detail={
+                "message": "old matched multiple times; set replace_all=true or widen anchor",
+                "match_count": count,
+            })
+        updated = current.replace(old, new) if replace_all else current.replace(old, new, 1)
+        if len(updated.encode("utf-8")) > _MAX_FILE_BYTES:
+            raise HTTPException(status_code=413, detail="file would exceed 10 MiB")
+        write_note(settings.vault_path, path, updated)
+        result = read_note(settings.vault_path, path)
+        result["replacements"] = count if replace_all else 1
+        return result
     else:
         raise HTTPException(status_code=422, detail=f"Unknown op: {body.op}")
 
     write_note(settings.vault_path, path, new_content)
     return read_note(settings.vault_path, path)
+
+
+@router.patch("/{path:path}")
+def patch_note(path: str, body: NotePatch) -> dict:
+    return _apply_patch(path, body)
 
 
 @router.delete("/{path:path}", status_code=status.HTTP_204_NO_CONTENT)
