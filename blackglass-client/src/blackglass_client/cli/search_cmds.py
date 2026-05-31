@@ -5,8 +5,11 @@ from ._output import _emit
 
 
 @click.group()
-def search():
+@click.pass_context
+def search(ctx: click.Context) -> None:
     """Search the vault."""
+    ctx.ensure_object(dict)
+    ctx.obj.setdefault("pretty", False)
 
 
 @search.command("text")

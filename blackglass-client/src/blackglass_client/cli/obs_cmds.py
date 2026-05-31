@@ -5,8 +5,11 @@ from ._output import _emit
 
 
 @click.group()
-def obs():
+@click.pass_context
+def obs(ctx: click.Context) -> None:
     """Observability: status and logs."""
+    ctx.ensure_object(dict)
+    ctx.obj.setdefault("pretty", False)
 
 
 @obs.command("status")

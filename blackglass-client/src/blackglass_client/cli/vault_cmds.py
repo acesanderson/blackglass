@@ -11,8 +11,11 @@ from ._payloads import (
 
 
 @click.group()
-def vault():
+@click.pass_context
+def vault(ctx: click.Context) -> None:
     """Vault-level operations."""
+    ctx.ensure_object(dict)
+    ctx.obj.setdefault("pretty", False)
 
 
 def _parse_fm(ctx: click.Context, param: click.Parameter, values: tuple[str, ...]) -> dict:

@@ -12,8 +12,11 @@ from ._payloads import (
 
 
 @click.group()
-def notes():
+@click.pass_context
+def notes(ctx: click.Context) -> None:
     """Note CRUD operations."""
+    ctx.ensure_object(dict)
+    ctx.obj.setdefault("pretty", False)
 
 
 @notes.command("get")
