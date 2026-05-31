@@ -1,9 +1,11 @@
 from __future__ import annotations
-from fastapi import APIRouter, Body, Depends, HTTPException
+from pathlib import PurePosixPath
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from ..auth import require_api_key
 from ..config import settings
 from ..vault import (
     list_files,
+    list_files_filtered,
     list_tags,
     compute_backlinks,
     list_periodic_notes,
@@ -18,8 +20,35 @@ router = APIRouter(prefix="/vault", dependencies=[Depends(require_api_key)])
 
 
 @router.get("/files")
-def get_files() -> list[dict]:
-    return list_files(settings.vault_path)
+def get_files(request: Request, limit: int | None = None):
+    raw = request.query_params
+    tag_list = [v for k, v in raw.multi_items() if k == "tag"]
+    fm_filters: dict[str, str] = {}
+    seen_fm: set[str] = set()
+    for key, val in raw.multi_items():
+        if not key.startswith("fm."):
+            continue
+        bare = key[3:]
+        if "." in bare:
+            raise HTTPException(status_code=400, detail="nested keys not supported")
+        if bare in seen_fm:
+            raise HTTPException(status_code=400, detail=f"duplicate filter key: fm.{bare}")
+        seen_fm.add(bare)
+        fm_filters[bare] = val
+    path_glob = raw.get("path_glob")
+    if path_glob is not None and ".." in PurePosixPath(path_glob).parts:
+        raise HTTPException(status_code=400, detail="path_glob may not contain '..'")
+    has_filter = bool(tag_list or fm_filters or path_glob or limit)
+    if not has_filter:
+        return list_files(settings.vault_path)
+    filtered, total, all_count = list_files_filtered(
+        settings.vault_path,
+        tags=tag_list,
+        fm_filters=fm_filters,
+        path_glob=path_glob,
+        limit=limit,
+    )
+    return {"files": filtered, "total": total, "filtered_from": all_count}
 
 
 @router.get("/tags")
