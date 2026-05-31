@@ -117,6 +117,63 @@ def periodic_today_patch(body: NotePatch) -> dict:
     return _apply_patch(f"{date_str}.md", body)
 
 
+@router.post("/notes/{path:path}/move")
+async def move_note_route(path: str, body: dict) -> dict:
+    from ..vault import move_note, rewrite_wikilinks, find_stem_collisions
+    from ..db import update_embedding_path
+    to = body.get("to", "")
+    rewrite_links = body.get("rewrite_links", True)
+    if not isinstance(to, str) or not to:
+        raise HTTPException(status_code=400, detail="to must be a non-empty string")
+    if to.endswith("/"):
+        raise HTTPException(status_code=400, detail="to must not end with /")
+
+    # Pre-flight: validate source path + existence before any vault scan
+    from ..vault import _resolve as _resolve_path
+    try:
+        src = _resolve_path(settings.vault_path, path)
+        _resolve_path(settings.vault_path, to)  # validates `to` doesn't escape
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not src.exists():
+        raise HTTPException(status_code=404, detail="source not found")
+
+    # Now safe to do the O(N) collision scan
+    collisions = find_stem_collisions(settings.vault_path, path)
+
+    try:
+        move_note(settings.vault_path, path, to)
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail="destination exists")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"rename failed: {type(exc).__name__}")
+
+    db_ok = True
+    db_err = None
+    try:
+        await update_embedding_path(path, to)
+    except Exception as exc:
+        db_ok = False
+        db_err = type(exc).__name__
+
+    rewrote, errors = ([], [])
+    if rewrite_links:
+        rewrote, errors = rewrite_wikilinks(settings.vault_path, path, to)
+
+    return {
+        "from": path,
+        "to": to,
+        "rewrote_links_in": rewrote,
+        "rewrite_errors": errors,
+        "embedding_updated": db_ok,
+        "db_error": db_err,
+        "stem_collision": bool(collisions),
+        "stem_collision_paths": collisions,
+    }
+
+
 _SKIP_DIRS = ("/.obsidian/", "/.trash/")
 
 

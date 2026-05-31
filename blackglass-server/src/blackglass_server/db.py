@@ -85,3 +85,11 @@ async def semantic_search(query_embedding: list[float], limit: int = 10) -> list
             LIMIT $2
         """, query_embedding, limit)
         return [{"path": r["path"], "score": float(r["score"])} for r in rows]
+
+
+async def update_embedding_path(old: str, new: str) -> None:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM vault_embeddings WHERE path=$1", new)
+            await conn.execute("UPDATE vault_embeddings SET path=$1 WHERE path=$2", new, old)

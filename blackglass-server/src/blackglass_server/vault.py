@@ -186,6 +186,93 @@ def ensure_daily_note(vault_path: Path, date_str: str) -> tuple[Path, bool]:
     return p, created
 
 
+def _wikilink_patterns(
+    old_stem: str, new_stem: str,
+    old_full: str, new_full: str,
+) -> list[tuple[re.Pattern, str]]:
+    # Build stem-only patterns plus full-path patterns.
+    # Dedup when the note sits at vault root (stem == full-path-no-ext).
+    pairs = [(old_stem, new_stem)]
+    if old_full != old_stem:
+        pairs.append((old_full, new_full))
+    pats: list[tuple[re.Pattern, str]] = []
+    for old, new in pairs:
+        o = re.escape(old)
+        n = new.replace("\\", r"\\")
+        pats.extend([
+            (re.compile(rf"(!?)\[\[{o}\]\]"), rf"\1[[{n}]]"),
+            (re.compile(rf"(!?)\[\[{o}\|([^\]]+)\]\]"), rf"\1[[{n}|\2]]"),
+            (re.compile(rf"(!?)\[\[{o}#([^\]\|]+)\]\]"), rf"\1[[{n}#\2]]"),
+            (re.compile(rf"(!?)\[\[{o}#([^\]\|]+)\|([^\]]+)\]\]"), rf"\1[[{n}#\2|\3]]"),
+        ])
+    return pats
+
+
+def rewrite_wikilinks(
+    vault_path: Path,
+    old_rel: str,
+    new_rel: str,
+) -> tuple[list[str], list[dict]]:
+    old_stem = Path(old_rel).stem
+    new_stem = Path(new_rel).stem
+    old_full = str(Path(old_rel).with_suffix(""))
+    new_full = str(Path(new_rel).with_suffix(""))
+    patterns = _wikilink_patterns(old_stem, new_stem, old_full, new_full)
+    rewrote: list[str] = []
+    errors: list[dict] = []
+    for p in vault_path.rglob("*.md"):
+        if _skip(p):
+            continue
+        if str(p.relative_to(vault_path)) in (old_rel, new_rel):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            errors.append({"path": str(p.relative_to(vault_path)), "error_class": type(exc).__name__})
+            continue
+        new_text = text
+        for pat, repl in patterns:
+            new_text = pat.sub(repl, new_text)
+        if new_text != text:
+            try:
+                p.write_text(new_text, encoding="utf-8")
+                rewrote.append(str(p.relative_to(vault_path)))
+            except OSError as exc:
+                errors.append({"path": str(p.relative_to(vault_path)), "error_class": type(exc).__name__})
+    return rewrote, errors
+
+
+def find_stem_collisions(vault_path: Path, old_rel: str) -> list[str]:
+    target_stem = Path(old_rel).stem
+    out = []
+    for p in vault_path.rglob("*.md"):
+        if _skip(p):
+            continue
+        rel = str(p.relative_to(vault_path))
+        if rel == old_rel:
+            continue
+        if Path(rel).stem == target_stem:
+            out.append(rel)
+    return out
+
+
+def move_note(
+    vault_path: Path,
+    old_rel: str,
+    new_rel: str,
+) -> None:
+    src = _resolve(vault_path, old_rel)
+    dst = _resolve(vault_path, new_rel)
+    if not src.exists():
+        raise FileNotFoundError(old_rel)
+    if dst.exists():
+        raise FileExistsError(new_rel)
+    if src == dst:
+        raise ValueError("source equals destination")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+
+
 def fulltext_search(vault_path: Path, query: str) -> list[dict]:
     query_lower = query.lower()
     results = []
