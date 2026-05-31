@@ -1,11 +1,6 @@
 from __future__ import annotations
 import json
-import httpx
 from blackglass_client.cli.main import cli
-
-
-def _ok(mock_api, method: str, path: str, body):
-    return getattr(mock_api, method.lower())(path).respond(200, json=body)
 
 
 def test_notes_get(runner, mock_api):
