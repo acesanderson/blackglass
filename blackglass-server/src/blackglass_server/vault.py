@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+import stat as _stat
 from pathlib import Path
 from .text_utils import split_frontmatter, extract_wikilinks, extract_tags
 
@@ -102,3 +103,32 @@ def fulltext_search(vault_path: Path, query: str) -> list[dict]:
             excerpt = text[max(0, idx - 100):idx + 200].strip()
             results.append({"path": str(p.relative_to(vault_path)), "excerpt": excerpt})
     return results
+
+
+def note_meta(vault_path: Path, rel_path: str) -> dict:
+    p = _resolve(vault_path, rel_path)
+    try:
+        st = p.stat()
+    except FileNotFoundError:
+        return {
+            "path": rel_path,
+            "exists": False,
+            "size": 0,
+            "mtime": None,
+            "frontmatter": {},
+            "tags": [],
+            "wikilinks_count": 0,
+        }
+    if _stat.S_ISDIR(st.st_mode):
+        raise IsADirectoryError(rel_path)
+    text = p.read_text(encoding="utf-8", errors="ignore")
+    fm, body = split_frontmatter(text)
+    return {
+        "path": rel_path,
+        "exists": True,
+        "size": st.st_size,
+        "mtime": st.st_mtime,
+        "frontmatter": fm,
+        "tags": extract_tags(fm),
+        "wikilinks_count": body.count("[["),
+    }

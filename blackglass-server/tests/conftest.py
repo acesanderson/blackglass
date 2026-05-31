@@ -80,18 +80,23 @@ def client(vault: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("BLACKGLASS_API_KEY", "test-key")
     monkeypatch.setenv("POSTGRES_PASSWORD", "ignored")
 
+    # Import app (and all route modules) before the reload so we can grab the
+    # settings object that route modules captured at import time.
+    from blackglass_server.main import app  # noqa: F401 — side-effect import
+    from blackglass_server.routes import notes as _notes_mod
+    live_settings = _notes_mod.settings
+
     # Re-import settings module so env vars are read fresh.
     from blackglass_server import config as cfg_mod
     importlib.reload(cfg_mod)
 
     # importlib.reload creates a new settings object in cfg_mod, but every
     # other module (auth, routes, etc.) already holds a reference to the
-    # original settings object via `from .config import settings`. We must
-    # also patch the attributes on the original shared object so those
-    # in-flight references see the test values.
-    from blackglass_server.config import settings as original_settings
-    monkeypatch.setattr(original_settings, "vault_path", vault)
-    monkeypatch.setattr(original_settings, "api_key", "test-key")
+    # original settings object via `from .config import settings`. Patch
+    # vault_path and api_key on that live object so all route handlers see
+    # the test values.
+    monkeypatch.setattr(live_settings, "vault_path", vault)
+    monkeypatch.setattr(live_settings, "api_key", "test-key")
 
     # Patch DB hooks to no-ops; specific tests can override.
     from blackglass_server import db as db_mod
@@ -110,5 +115,4 @@ def client(vault: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(main_mod, "init_pool", _no_pool)
     monkeypatch.setattr(main_mod, "close_pool", _no_pool)
 
-    from blackglass_server.main import app
     return TestClient(app, headers={"X-API-Key": "test-key"})

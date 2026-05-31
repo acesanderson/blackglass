@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from ..auth import require_api_key
 from ..config import settings
-from ..vault import read_note, write_note, delete_note, _resolve
+from ..vault import read_note, write_note, delete_note, note_meta, _resolve
 from ..text_utils import split_frontmatter
 
 router = APIRouter(prefix="/vault/notes", dependencies=[Depends(require_api_key)])
@@ -21,6 +21,18 @@ class NotePatch(BaseModel):
     content: str | None = None
     key: str | None = None
     value: str | None = None
+
+
+# Registered BEFORE the catch-all GET /{path:path}; FastAPI's first-match resolution
+# routes /vault/notes/<rel>/meta here. Reordering these decorators silently breaks meta.
+@router.get("/{path:path}/meta")
+def get_meta(path: str) -> dict:
+    try:
+        return note_meta(settings.vault_path, path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="path escapes vault")
+    except IsADirectoryError:
+        raise HTTPException(status_code=400, detail="path is a directory")
 
 
 @router.get("/{path:path}")
