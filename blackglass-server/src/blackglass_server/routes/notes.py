@@ -23,8 +23,46 @@ class NotePatch(BaseModel):
     value: str | None = None
 
 
+_MAX_BATCH_SIZE = 50
+
+
+class BatchReadIn(BaseModel):
+    paths: list[str]
+
+
 # Registered BEFORE the catch-all GET /{path:path}; FastAPI's first-match resolution
-# routes /vault/notes/<rel>/meta here. Reordering these decorators silently breaks meta.
+# routes /vault/notes/<rel>/meta here and /vault/notes/batch here.
+# Reordering these decorators silently breaks meta/batch.
+@router.post("/batch", status_code=status.HTTP_200_OK)
+def batch_read(payload: BatchReadIn) -> dict:
+    paths = payload.paths
+    # Validation 400s (rather than Pydantic's 422) per spec §2: agent-facing batch
+    # endpoint uses a single status family for all body shape rejections.
+    if not paths:
+        raise HTTPException(status_code=400, detail="paths must be non-empty")
+    if len(paths) > _MAX_BATCH_SIZE:
+        raise HTTPException(status_code=400, detail=f"max {_MAX_BATCH_SIZE} paths per batch")
+    results = []
+    summary: dict[str, int] = {"ok": 0, "not_found": 0, "error": 0}
+    for p in paths:
+        # FileNotFoundError is a subclass of OSError; catch it before the OSError fallback.
+        # ValueError comes from _resolve on path-escape; not an OSError, ordering is incidental.
+        try:
+            note = read_note(settings.vault_path, p)
+            results.append({"path": p, "status": "ok", "note": note})
+            summary["ok"] += 1
+        except FileNotFoundError:
+            results.append({"path": p, "status": "not_found", "error": "not found"})
+            summary["not_found"] += 1
+        except ValueError:
+            results.append({"path": p, "status": "error", "error": "path escapes vault"})
+            summary["error"] += 1
+        except OSError as exc:
+            results.append({"path": p, "status": "error", "error": type(exc).__name__})
+            summary["error"] += 1
+    return {"results": results, "summary": summary}
+
+
 @router.get("/{path:path}/meta")
 def get_meta(path: str) -> dict:
     try:
