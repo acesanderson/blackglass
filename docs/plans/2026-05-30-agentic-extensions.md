@@ -1606,6 +1606,41 @@ git add blackglass-server/src/blackglass_server/routes/notes.py \
 git commit -m "feat(server): anchored replace PATCH op"
 ```
 
+- [ ] **Step 7.7: Add PATCH /vault/periodic/today wrapper**
+
+The spec defines `PATCH /vault/periodic/today` (Spec §6 routes). It delegates to the same dispatch as `PATCH /vault/notes/{path}` once today's note path is resolved.
+
+In `blackglass-server/src/blackglass_server/routes/vault_routes.py`, add:
+
+```python
+@router.patch("/periodic/today")
+def periodic_today_patch(body: dict) -> dict:
+    date_str = today_in_tz(settings.tz)
+    ensure_daily_note(settings.vault_path, date_str)
+    from .notes import patch_note  # shares op dispatch
+    return patch_note(f"{date_str}.md", body)
+```
+
+(If `patch_note` is not a directly-callable handler — i.e., it's a FastAPI route function — extract the op-dispatch body into a helper `_apply_patch(path: str, body: dict) -> dict` in `routes/notes.py` and have both PATCH routes call it.)
+
+Add to `blackglass-server/tests/test_daily.py`:
+
+```python
+def test_patch_today_replace(client, vault):
+    import datetime, zoneinfo
+    today = datetime.datetime.now(zoneinfo.ZoneInfo("UTC")).strftime("%Y-%m-%d")
+    target = vault / f"{today}.md"
+    if target.exists():
+        target.unlink()
+    # First create + populate via append
+    client.post("/vault/periodic/today/append", json={"content": "old line\n"})
+    r = client.patch("/vault/periodic/today", json={
+        "op": "replace", "old": "old line", "new": "new line"
+    })
+    assert r.status_code == 200
+    assert target.read_text() == "new line\n"
+```
+
 ---
 
 ## Task 8: Hybrid text + semantic search

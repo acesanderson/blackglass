@@ -1,6 +1,8 @@
 from __future__ import annotations
+import datetime
 import re
 import stat as _stat
+import zoneinfo
 from pathlib import Path
 from .text_utils import split_frontmatter, extract_wikilinks, extract_tags
 
@@ -89,6 +91,38 @@ def list_periodic_notes(vault_path: Path) -> list[dict]:
         if _PERIODIC_RE.match(p.name):
             results.append({"path": p.name, "date": p.stem})
     return sorted(results, key=lambda x: x["date"], reverse=True)
+
+
+_DATE_FMT = "%Y-%m-%d"
+_MIN_DATE = datetime.date(1970, 1, 1)
+_MAX_DATE = datetime.date(2099, 12, 31)
+
+
+def today_in_tz(tz: str) -> str:
+    return datetime.datetime.now(zoneinfo.ZoneInfo(tz)).strftime(_DATE_FMT)
+
+
+def yesterday_in_tz(tz: str) -> str:
+    now = datetime.datetime.now(zoneinfo.ZoneInfo(tz))
+    return (now - datetime.timedelta(days=1)).strftime(_DATE_FMT)
+
+
+def validate_date_str(date_str: str) -> None:
+    try:
+        d = datetime.datetime.strptime(date_str, _DATE_FMT).date()
+    except ValueError as exc:
+        raise ValueError(f"invalid date format, expected YYYY-MM-DD: {date_str}") from exc
+    if d < _MIN_DATE or d > _MAX_DATE:
+        raise ValueError(f"date out of range [{_MIN_DATE}, {_MAX_DATE}]")
+
+
+def ensure_daily_note(vault_path: Path, date_str: str) -> tuple[Path, bool]:
+    validate_date_str(date_str)
+    p = vault_path / f"{date_str}.md"
+    created = not p.exists()
+    if created:
+        p.touch(exist_ok=True)
+    return p, created
 
 
 def fulltext_search(vault_path: Path, query: str) -> list[dict]:
