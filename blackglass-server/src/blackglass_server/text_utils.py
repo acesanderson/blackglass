@@ -33,3 +33,24 @@ def extract_tags(frontmatter: dict) -> list[str]:
     if isinstance(val, str):
         return [val]
     return []
+
+
+_SNIPPET_LOOKBACK = 50
+
+
+def snippet_from_body(body: str, snippet_chars: int) -> str:
+    if snippet_chars <= 0:
+        return ""
+    stripped = body.lstrip()
+    if len(stripped) <= snippet_chars:
+        return stripped
+    window = stripped[: snippet_chars + 100]
+    if snippet_chars < len(window) and window[snippet_chars - 1] in " \t\n":
+        return window[:snippet_chars].rstrip()
+    cut = window.rfind(" ", max(0, snippet_chars - _SNIPPET_LOOKBACK), snippet_chars)
+    if cut == -1:
+        cut2 = window.rfind("\n", max(0, snippet_chars - _SNIPPET_LOOKBACK), snippet_chars)
+        if cut2 == -1:
+            return window[:snippet_chars]
+        cut = cut2
+    return window[:cut].rstrip()
