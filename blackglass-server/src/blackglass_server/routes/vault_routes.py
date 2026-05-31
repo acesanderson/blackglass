@@ -162,16 +162,18 @@ async def move_note_route(path: str, body: dict) -> dict:
     if rewrite_links:
         rewrote, errors = rewrite_wikilinks(settings.vault_path, path, to)
 
-    return {
+    result = {
         "from": path,
         "to": to,
         "rewrote_links_in": rewrote,
         "rewrite_errors": errors,
         "embedding_updated": db_ok,
-        "db_error": db_err,
         "stem_collision": bool(collisions),
         "stem_collision_paths": collisions,
     }
+    if not db_ok:
+        result["db_error"] = db_err
+    return result
 
 
 _SKIP_DIRS = ("/.obsidian/", "/.trash/")

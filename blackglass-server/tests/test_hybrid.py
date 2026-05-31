@@ -54,6 +54,18 @@ def test_hybrid_empty_q_400(client):
     assert r.status_code == 400
 
 
+def test_hybrid_snippet_chars_zero_omits_field(client, monkeypatch):
+    from blackglass_server.routes import search as sroute
+    async def embed(text): return [0.0] * 768
+    async def sem(emb, limit=10): return [{"path": "alpha.md", "score": 0.9}]
+    monkeypatch.setattr(sroute, "embed_text", embed)
+    monkeypatch.setattr(sroute, "semantic_search", sem)
+    r = client.get("/vault/hybrid-search", params={"q": "AAA", "snippet_chars": 0})
+    body = r.json()
+    for hit in body["results"]:
+        assert "snippet" not in hit
+
+
 def test_hybrid_backwater_http_error_propagates(client, monkeypatch):
     from blackglass_server.routes import search as sroute
     from fastapi.testclient import TestClient

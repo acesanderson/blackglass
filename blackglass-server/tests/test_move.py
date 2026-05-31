@@ -21,6 +21,7 @@ def test_move_renames_file(client, vault):
     assert body["to"] == "dest.md"
     assert (vault / "dest.md").read_text() == "hello"
     assert not (vault / "src.md").exists()
+    assert "db_error" not in body
 
 
 def test_move_with_link_rewrite(client, vault):

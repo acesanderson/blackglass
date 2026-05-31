@@ -114,12 +114,14 @@ async def hybrid_search(
                 snippet = b["text_excerpt"][:snippet_chars]
             else:
                 snippet = _snippet_for_path(b["path"], snippet_chars)
-        out.append({
+        entry = {
             "path": b["path"],
             "score": b["score"],
-            "snippet": snippet,
             "sources": sorted(b["sources"]),
             "text_rank": b["text_rank"],
             "semantic_rank": b["semantic_rank"],
-        })
+        }
+        if snippet_chars > 0:
+            entry["snippet"] = snippet
+        out.append(entry)
     return {"results": out, "degraded": degraded}
