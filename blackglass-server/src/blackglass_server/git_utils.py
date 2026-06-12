@@ -1,6 +1,11 @@
 from __future__ import annotations
+import logging
 import subprocess
+import threading
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
+_git_lock = threading.Lock()
 
 _CHANGE_LETTER = {
     "A": "added",
@@ -152,3 +157,77 @@ def git_changes(
                 for ch in c["changes"]:
                     ch["diff_stats"] = per_file.get(ch["path"])
     return commits
+
+
+def git_commit_and_push(vault_path: Path, relative_paths: list[str], action: str) -> None:
+    """Stage, commit, and push specific relative paths in the vault repository."""
+    if not relative_paths:
+        return
+
+    # Check if vault is actually a git repository
+    if not (vault_path / ".git").exists():
+        _log.warning("Vault path is not a Git repository. Skipping auto-commit/push.")
+        return
+
+    with _git_lock:
+        try:
+            # 1. Stage the files
+            for rel in relative_paths:
+                full_path = vault_path / rel
+                if full_path.exists():
+                    subprocess.run(
+                        ["git", "-C", str(vault_path), "add", rel],
+                        check=True,
+                        capture_output=True,
+                    )
+                else:
+                    subprocess.run(
+                        ["git", "-C", str(vault_path), "rm", "--cached", "--ignore-unmatch", rel],
+                        check=True,
+                        capture_output=True,
+                    )
+
+            # 2. Check if there are any staged changes
+            status_proc = subprocess.run(
+                ["git", "-C", str(vault_path), "diff", "--cached", "--quiet"],
+                capture_output=True,
+            )
+            if status_proc.returncode == 0:
+                # No staged changes to commit
+                return
+
+            # 3. Commit the changes
+            paths_str = ", ".join(relative_paths[:3])
+            if len(relative_paths) > 3:
+                paths_str += f" and {len(relative_paths) - 3} others"
+
+            commit_msg = f"api: {action} {paths_str}"
+            subprocess.run(
+                ["git", "-C", str(vault_path), "commit", "-m", commit_msg],
+                check=True,
+                capture_output=True,
+            )
+
+            # 4. Pull and Push
+            pull_res = subprocess.run(
+                ["git", "-C", str(vault_path), "pull", "--rebase"],
+                capture_output=True,
+            )
+            if pull_res.returncode != 0:
+                _log.error(f"Git pull failed during push-flow: {pull_res.stderr.decode('utf-8', errors='ignore').strip()}")
+                return
+
+            push_res = subprocess.run(
+                ["git", "-C", str(vault_path), "push"],
+                capture_output=True,
+            )
+            if push_res.returncode != 0:
+                _log.error(f"Git push failed: {push_res.stderr.decode('utf-8', errors='ignore').strip()}")
+        except subprocess.CalledProcessError as exc:
+            _log.error(
+                f"Git operation failed: cmd={exc.cmd}, "
+                f"stderr={exc.stderr.decode('utf-8', errors='ignore').strip()}"
+            )
+        except Exception as exc:
+            _log.error(f"Unexpected error in git_commit_and_push: {exc}")
+

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 
 from ..auth import require_api_key
 from ..config import settings
 from ..vault import read_note, write_note, delete_note, note_meta, _resolve
 from ..text_utils import split_frontmatter
+from ..git_utils import git_commit_and_push
 
 router = APIRouter(prefix="/vault/notes", dependencies=[Depends(require_api_key)])
 
@@ -87,7 +88,7 @@ def get_note(path: str) -> dict:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_note(path: str, body: NoteCreate) -> dict:
+def create_note(path: str, body: NoteCreate, background_tasks: BackgroundTasks) -> dict:
     try:
         full = _resolve(settings.vault_path, path)
     except ValueError:
@@ -95,12 +96,14 @@ def create_note(path: str, body: NoteCreate) -> dict:
     if full.exists():
         raise HTTPException(status_code=409, detail=f"Note already exists: {path}")
     write_note(settings.vault_path, path, body.content)
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "create")
     return read_note(settings.vault_path, path)
 
 
 @router.put("/{path:path}")
-def replace_note(path: str, body: NoteCreate) -> dict:
+def replace_note(path: str, body: NoteCreate, background_tasks: BackgroundTasks) -> dict:
     write_note(settings.vault_path, path, body.content)
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "replace")
     return read_note(settings.vault_path, path)
 
 
@@ -154,13 +157,16 @@ def _apply_patch(path: str, body: NotePatch) -> dict:
 
 
 @router.patch("/{path:path}")
-def patch_note(path: str, body: NotePatch) -> dict:
-    return _apply_patch(path, body)
+def patch_note(path: str, body: NotePatch, background_tasks: BackgroundTasks) -> dict:
+    res = _apply_patch(path, body)
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "update")
+    return res
 
 
 @router.delete("/{path:path}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_note_route(path: str) -> None:
+def delete_note_route(path: str, background_tasks: BackgroundTasks) -> None:
     try:
         delete_note(settings.vault_path, path)
+        background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "delete")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Note not found: {path}")

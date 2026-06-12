@@ -3,10 +3,10 @@ import datetime
 import subprocess
 import time as _time
 from pathlib import PurePosixPath
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, BackgroundTasks
 from ..auth import require_api_key
 from ..config import settings
-from ..git_utils import git_changes
+from ..git_utils import git_changes, git_commit_and_push
 from ..vault import (
     list_files,
     list_files_filtered,
@@ -73,27 +73,33 @@ def get_backlinks(path: str) -> dict:
 
 
 @router.get("/periodic/today")
-def periodic_today() -> dict:
+def periodic_today(background_tasks: BackgroundTasks) -> dict:
     date_str = today_in_tz(settings.tz)
     _, created = ensure_daily_note(settings.vault_path, date_str)
+    if created:
+        background_tasks.add_task(git_commit_and_push, settings.vault_path, [f"{date_str}.md"], "create")
     note = read_note(settings.vault_path, f"{date_str}.md")
     note["created"] = created
     return note
 
 
 @router.get("/periodic/yesterday")
-def periodic_yesterday() -> dict:
+def periodic_yesterday(background_tasks: BackgroundTasks) -> dict:
     date_str = yesterday_in_tz(settings.tz)
     _, created = ensure_daily_note(settings.vault_path, date_str)
+    if created:
+        background_tasks.add_task(git_commit_and_push, settings.vault_path, [f"{date_str}.md"], "create")
     note = read_note(settings.vault_path, f"{date_str}.md")
     note["created"] = created
     return note
 
 
 @router.get("/periodic/by-date/{date_str}")
-def periodic_by_date(date_str: str) -> dict:
+def periodic_by_date(date_str: str, background_tasks: BackgroundTasks) -> dict:
     try:
         _, created = ensure_daily_note(settings.vault_path, date_str)
+        if created:
+            background_tasks.add_task(git_commit_and_push, settings.vault_path, [f"{date_str}.md"], "create")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     note = read_note(settings.vault_path, f"{date_str}.md")
@@ -102,23 +108,26 @@ def periodic_by_date(date_str: str) -> dict:
 
 
 @router.post("/periodic/today/append")
-def periodic_today_append(content: str = Body(..., embed=True)) -> dict:
+def periodic_today_append(background_tasks: BackgroundTasks, content: str = Body(..., embed=True)) -> dict:
     date_str = today_in_tz(settings.tz)
     p, _ = ensure_daily_note(settings.vault_path, date_str)
     with p.open("a", encoding="utf-8") as f:
         f.write(content)
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [f"{date_str}.md"], "update")
     return read_note(settings.vault_path, f"{date_str}.md")
 
 
 @router.patch("/periodic/today")
-def periodic_today_patch(body: NotePatch) -> dict:
+def periodic_today_patch(body: NotePatch, background_tasks: BackgroundTasks) -> dict:
     date_str = today_in_tz(settings.tz)
     ensure_daily_note(settings.vault_path, date_str)
-    return _apply_patch(f"{date_str}.md", body)
+    res = _apply_patch(f"{date_str}.md", body)
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [f"{date_str}.md"], "update")
+    return res
 
 
 @router.post("/notes/{path:path}/move")
-async def move_note_route(path: str, body: dict) -> dict:
+async def move_note_route(path: str, body: dict, background_tasks: BackgroundTasks) -> dict:
     from ..vault import move_note, rewrite_wikilinks, find_stem_collisions
     from ..db import update_embedding_path
     to = body.get("to", "")
@@ -161,6 +170,8 @@ async def move_note_route(path: str, body: dict) -> dict:
     rewrote, errors = ([], [])
     if rewrite_links:
         rewrote, errors = rewrite_wikilinks(settings.vault_path, path, to)
+
+    background_tasks.add_task(git_commit_and_push, settings.vault_path, [path, to] + rewrote, "move")
 
     result = {
         "from": path,
