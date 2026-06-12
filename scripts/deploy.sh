@@ -36,7 +36,7 @@ git -C "$LOCAL_REPO" push
 
 deploy_botvinnik() {
     echo "==> [botvinnik] pulling code..."
-    ssh botvinnik "git -C $REMOTE_REPO pull --ff-only https://${GITHUB_PERSONAL_TOKEN}@github.com/acesanderson/blackglass.git"
+    ssh botvinnik "GIT_TERMINAL_PROMPT=0 git -C $REMOTE_REPO pull --ff-only https://x-access-token:${GITHUB_PERSONAL_TOKEN}@github.com/acesanderson/blackglass.git"
 
     if [[ "$SYNC_DEPS" -eq 1 ]]; then
         echo "==> [botvinnik] syncing deps..."
@@ -63,7 +63,7 @@ deploy_botvinnik() {
 
 deploy_alphablue() {
     echo "==> [alphablue] pulling code..."
-    ssh alphablue "git -C $REMOTE_REPO pull --ff-only https://${GITHUB_PERSONAL_TOKEN}@github.com/acesanderson/blackglass.git"
+    ssh alphablue "GIT_TERMINAL_PROMPT=0 git -C $REMOTE_REPO pull --ff-only https://x-access-token:${GITHUB_PERSONAL_TOKEN}@github.com/acesanderson/blackglass.git"
 }
 
 case "$TARGET" in
