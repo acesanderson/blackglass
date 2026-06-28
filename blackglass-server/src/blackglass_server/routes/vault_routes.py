@@ -21,6 +21,16 @@ from ..vault import (
 )
 from .notes import NotePatch, _apply_patch
 
+def _validate_flat_path(path: str) -> str:
+    """Reject paths with directory components if flat enforcement is enabled."""
+    if not settings.flat:
+        return path
+    # Strip .md extension for validation
+    stem = path.removesuffix(".md")
+    if "/" in stem or "\\" in stem:
+        raise HTTPException(400, f"Flat vault enforced. Paths must be root-level: {path}")
+    return path
+
 router = APIRouter(prefix="/vault", dependencies=[Depends(require_api_key)])
 
 
