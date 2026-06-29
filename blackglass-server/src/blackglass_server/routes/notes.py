@@ -89,7 +89,8 @@ def get_note(path: str) -> dict:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_note(path: str, body: NoteCreate, background_tasks: BackgroundTasks) -> dict:
-    _validate_flat_path(path)
+    if "/" in path:
+        raise HTTPException(status_code=400, detail=f"Flat vault constraint violated: {path}")
     try:
         full = _resolve(settings.vault_path, path)
     except ValueError:
@@ -103,7 +104,8 @@ def create_note(path: str, body: NoteCreate, background_tasks: BackgroundTasks) 
 
 @router.put("/{path:path}")
 def replace_note(path: str, body: NoteCreate, background_tasks: BackgroundTasks) -> dict:
-    _validate_flat_path(path)
+    if "/" in path:
+        raise HTTPException(status_code=400, detail=f"Flat vault constraint violated: {path}")
     write_note(settings.vault_path, path, body.content)
     background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "replace")
     return read_note(settings.vault_path, path)
@@ -160,7 +162,8 @@ def _apply_patch(path: str, body: NotePatch) -> dict:
 
 @router.patch("/{path:path}")
 def patch_note(path: str, body: NotePatch, background_tasks: BackgroundTasks) -> dict:
-    _validate_flat_path(path)
+    if "/" in path:
+        raise HTTPException(status_code=400, detail=f"Flat vault constraint violated: {path}")
     res = _apply_patch(path, body)
     background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "update")
     return res
@@ -168,7 +171,8 @@ def patch_note(path: str, body: NotePatch, background_tasks: BackgroundTasks) ->
 
 @router.delete("/{path:path}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note_route(path: str, background_tasks: BackgroundTasks) -> None:
-    _validate_flat_path(path)
+    if "/" in path:
+        raise HTTPException(status_code=400, detail=f"Flat vault constraint violated: {path}")
     try:
         delete_note(settings.vault_path, path)
         background_tasks.add_task(git_commit_and_push, settings.vault_path, [path], "delete")

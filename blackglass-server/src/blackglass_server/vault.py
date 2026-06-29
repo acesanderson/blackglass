@@ -16,7 +16,7 @@ _SKIP_DIRS = {".obsidian", ".trash"}
 
 
 def _skip(p: Path) -> bool:
-    return bool(_SKIP_DIRS & set(p.parts))
+    return bool(_SKIP_DIRS & set(p.parts)) or "/" in str(p.relative_to(p.parent))
 
 
 def _resolve(vault_path: Path, rel_path: str) -> Path:
