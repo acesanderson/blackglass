@@ -1,0 +1,15 @@
+version: 1
+name: filesystem-aliases
+description: "CLI aliases (cat, ls, grep, find, tree, etc.) mapping to blackglass endpoints, plus flat vault enforcement at the API level"
+issue: null
+creator: brian
+priority: 2
+phase: DONE
+blocked: false
+blocked_reason: null
+task_index: null
+task_total: null
+claimed_by: null
+claimed_at: null
+created: "2026-06-28T10:00:00Z"
+updated: "2026-07-13T16:00:00Z"

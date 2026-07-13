@@ -1,0 +1,15 @@
+version: 1
+name: agentic-extensions
+description: "9 new API features for LLM agent consumption: snippets, batch read, changes, frontmatter filtering, anchored replace, daily-note shortcuts, metadata fetch, move/rename, hybrid search"
+issue: null
+creator: brian
+priority: 2
+phase: SPEC
+blocked: false
+blocked_reason: null
+task_index: null
+task_total: null
+claimed_by: null
+claimed_at: null
+created: "2026-05-30T10:00:00Z"
+updated: "2026-07-13T16:00:00Z"

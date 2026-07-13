@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://valve.sdd.dev/schemas/project.yaml/v1.json",
+  "title": "Valve SDD Project",
+  "description": "Schema for .sdd/<project-name>/project.yaml — the FSM record for a single SDD project.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "description",
+    "creator",
+    "priority",
+    "phase",
+    "blocked",
+    "created",
+    "updated"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Used for migration when the schema evolves."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Kebab-case project name. Must match the directory name under .sdd/."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-line human-readable description of the project."
+    },
+    "issue": {
+      "type": ["string", "null"],
+      "description": "Optional free-string reference to an issue tracker entry (URL, Gitea ID, etc.)."
+    },
+    "creator": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who created and owns this project."
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3,
+      "default": 2,
+      "description": "Queue priority. 0 = highest, 3 = lowest. Default 2."
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["QUEUED", "SPEC", "PLAN", "IMPLEMENT", "DONE", "CANCELLED"],
+      "description": "Current FSM phase. Carries the full load for project state — no separate status field."
+    },
+    "blocked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the project is blocked. When true, blocked_reason should be set."
+    },
+    "blocked_reason": {
+      "type": ["string", "null"],
+      "description": "Free-string explanation of why the project is blocked. Should be set when blocked=true."
+    },
+    "task_index": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Current task number (1-indexed). Only meaningful during IMPLEMENT phase. Null otherwise."
+    },
+    "task_total": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Total number of tasks in plan.md. Only meaningful during IMPLEMENT phase. Null otherwise."
+    },
+    "claimed_by": {
+      "type": ["string", "null"],
+      "description": "Null when available. String agent name when someone is working on it."
+    },
+    "claimed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO-8601 timestamp with timezone. Null when unclaimed. Used for stale-claim detection."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp with timezone. When the project was created."
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp with timezone. Last modification time."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "blocked": { "const": true } },
+        "required": ["blocked"]
+      },
+      "then": {
+        "properties": { "blocked_reason": { "type": "string", "minLength": 1 } },
+        "required": ["blocked_reason"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "const": "IMPLEMENT" } },
+        "required": ["phase"]
+      },
+      "then": {
+        "required": ["task_index", "task_total"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "not": { "const": "IMPLEMENT" } } },
+        "required": ["phase"]
+      },
+      "then": {
+        "properties": {
+          "task_index": { "type": "null" },
+          "task_total": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "claimed_by": { "type": "string", "minLength": 1 } },
+        "required": ["claimed_by"]
+      },
+      "then": {
+        "required": ["claimed_at"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "claimed_by": { "type": "null" } }
+      },
+      "then": {
+        "properties": { "claimed_at": { "type": "null" } }
+      }
+    }
+  ]
+}

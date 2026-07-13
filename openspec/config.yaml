@@ -1,0 +1,8 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Python 3.12+, FastAPI, uvicorn, Jinja2, htmx
+  Existing: Blackglass FastAPI server on port 8083 with API key auth
+  Deployment: Botvinnik (172.16.0.3), behind VPN
+  Conventions: Read-only frontend, no write operations, mobile-first UI
+  Vault: /home/fishhouses/morphy (Obsidian vault, ~1000+ markdown notes)
