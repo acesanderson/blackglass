@@ -208,14 +208,30 @@ def git_commit_and_push(vault_path: Path, relative_paths: list[str], action: str
                 capture_output=True,
             )
 
-            # 4. Pull and Push
+            # 4. Stash any remaining unstaged changes, pull --rebase, then push
+            stash_res = subprocess.run(
+                ["git", "-C", str(vault_path), "stash", "--include-untracked"],
+                capture_output=True,
+            )
+            stashed = stash_res.returncode == 0 and b"No local changes" not in stash_res.stdout
+
             pull_res = subprocess.run(
                 ["git", "-C", str(vault_path), "pull", "--rebase"],
                 capture_output=True,
             )
             if pull_res.returncode != 0:
                 _log.error(f"Git pull failed during push-flow: {pull_res.stderr.decode('utf-8', errors='ignore').strip()}")
+                if stashed:
+                    subprocess.run(["git", "-C", str(vault_path), "stash", "pop"], capture_output=True)
                 return
+
+            if stashed:
+                pop_res = subprocess.run(
+                    ["git", "-C", str(vault_path), "stash", "pop"],
+                    capture_output=True,
+                )
+                if pop_res.returncode != 0:
+                    _log.warning(f"Stash pop failed after pull (non-fatal): {pop_res.stderr.decode('utf-8', errors='ignore').strip()}")
 
             push_res = subprocess.run(
                 ["git", "-C", str(vault_path), "push"],
