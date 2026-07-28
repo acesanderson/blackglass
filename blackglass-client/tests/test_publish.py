@@ -141,3 +141,16 @@ class TestPublishCommand:
         mock_api.get("/vault/notes/missing.md").respond(404, json={"detail": "Not found"})
         result = runner.invoke(cli, ["publish", "missing.md"])
         assert result.exit_code == 4
+
+
+class TestPublishRegistration:
+    def test_publish_in_help(self, runner):
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        assert "publish" in result.output
+
+    def test_publish_help(self, runner):
+        result = runner.invoke(cli, ["publish", "--help"])
+        assert result.exit_code == 0
+        assert "Publish a note as a GitHub Gist" in result.output
+        assert "--private" in result.output

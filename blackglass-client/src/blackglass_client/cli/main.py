@@ -4,6 +4,7 @@ from .notes import notes
 from .vault_cmds import vault
 from .search_cmds import search
 from .obs_cmds import obs
+from .publish import publish
 
 
 @click.group()
@@ -19,3 +20,4 @@ cli.add_command(notes)
 cli.add_command(vault)
 cli.add_command(search)
 cli.add_command(obs)
+cli.add_command(publish)
