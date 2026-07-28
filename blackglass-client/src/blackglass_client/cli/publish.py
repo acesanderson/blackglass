@@ -33,3 +33,33 @@ def get_note_date(content: str) -> str:
             if match:
                 return match.group(1)
     return date.today().isoformat()
+
+
+_GITHUB_BASE = "https://api.github.com"
+
+
+def create_gist(
+    token: str, filename: str, content: str, description: str, public: bool
+) -> dict:
+    """Create a GitHub Gist. Returns the API response dict."""
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    payload = {
+        "description": description,
+        "public": public,
+        "files": {filename: {"content": content}},
+    }
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.post(f"{_GITHUB_BASE}/gists", headers=headers, json=payload)
+        if resp.status_code >= 400:
+            detail = resp.text
+            try:
+                body = resp.json()
+                detail = body.get("message", detail)
+            except ValueError:
+                pass
+            click.echo(f"GitHub API error: {detail}", err=True)
+            sys.exit(1)
+        return resp.json()

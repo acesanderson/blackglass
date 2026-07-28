@@ -37,3 +37,45 @@ class TestGetNoteDate:
         content = "# Title\nBody"
         result = get_note_date(content)
         assert len(result) == 10
+
+
+import respx
+
+
+class TestCreateGist:
+    def test_creates_public_gist(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_PERSONAL_TOKEN", "ghp_test123")
+        gist_response = {
+            "url": "https://api.github.com/gists/abc123",
+            "html_url": "https://gist.github.com/user/abc123",
+            "id": "abc123",
+            "public": True,
+            "files": {"test.md": {"filename": "test.md"}},
+        }
+        with respx.mock(base_url="https://api.github.com") as github:
+            route = github.post("/gists").respond(201, json=gist_response)
+            from blackglass_client.cli.publish import create_gist
+            result = create_gist("ghp_test123", "test.md", "# Content", "Test gist", True)
+            assert result["id"] == "abc123"
+            assert result["html_url"] == "https://gist.github.com/user/abc123"
+            assert route.called
+            sent = route.calls.last.request.content
+            assert b'"public":true' in sent
+            assert b'"# Content"' in sent
+
+    def test_creates_private_gist(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_PERSONAL_TOKEN", "ghp_test123")
+        gist_response = {
+            "url": "https://api.github.com/gists/def456",
+            "html_url": "https://gist.github.com/user/def456",
+            "id": "def456",
+            "public": False,
+            "files": {"test.md": {"filename": "test.md"}},
+        }
+        with respx.mock(base_url="https://api.github.com") as github:
+            route = github.post("/gists").respond(201, json=gist_response)
+            from blackglass_client.cli.publish import create_gist
+            result = create_gist("ghp_test123", "test.md", "# Content", "Test gist", False)
+            assert result["public"] is False
+            sent = route.calls.last.request.content
+            assert b'"public":false' in sent
