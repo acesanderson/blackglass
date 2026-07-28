@@ -7,6 +7,9 @@ from datetime import date
 import click
 import httpx
 
+from ..client import request
+from ._output import _emit
+
 
 def strip_frontmatter(content: str) -> str:
     """Strip YAML frontmatter between first --- delimiters."""
@@ -33,6 +36,45 @@ def get_note_date(content: str) -> str:
             if match:
                 return match.group(1)
     return date.today().isoformat()
+
+
+@click.command()
+@click.argument("path")
+@click.option("--private", is_flag=True, help="Create a private gist (default: public).")
+def publish(path: str, private: bool) -> None:
+    """Publish a note as a GitHub Gist."""
+    token = os.environ.get("GITHUB_PERSONAL_TOKEN")
+    if not token:
+        click.echo("Error: GITHUB_PERSONAL_TOKEN environment variable is not set.", err=True)
+        sys.exit(1)
+
+    # Fetch note from blackglass
+    note = request("GET", f"/vault/notes/{path}")
+    content = note.get("content", "")
+
+    # Strip frontmatter and extract date
+    body = strip_frontmatter(content)
+    pub_date = get_note_date(content)
+
+    # Build gist metadata
+    filename = path.rsplit("/", 1)[-1]  # handle paths with /
+    title = filename.removesuffix(".md")
+    description = f"{title} — published from Blackglass {pub_date}"
+
+    # Create gist
+    gist = create_gist(token, filename, body, description, not private)
+
+    # Output result
+    _emit(
+        {
+            "url": gist["html_url"],
+            "html_url": gist["html_url"],
+            "id": gist["id"],
+            "filename": filename,
+            "public": gist["public"],
+        },
+        pretty=False,
+    )
 
 
 _GITHUB_BASE = "https://api.github.com"
