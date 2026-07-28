@@ -1,0 +1,15 @@
+version: 1
+name: add-publish-command
+description: "Add a blackglass publish CLI command that creates GitHub Gists from vault notes"
+issue: null
+creator: brian
+priority: 1
+phase: DONE
+blocked: false
+blocked_reason: null
+task_index: null
+task_total: 5
+claimed_by: null
+claimed_at: null
+created: "2026-07-28T18:05:00Z"
+updated: "2026-07-28T18:05:00Z"
